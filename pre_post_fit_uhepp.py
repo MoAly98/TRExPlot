@@ -4,6 +4,7 @@ import os
 from glob import glob
 from collections import defaultdict
 import numpy as np
+from tools.utils import rgx_match
 
 def get_args():
     '''
@@ -14,7 +15,10 @@ def get_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('folder', help="TRExFitter Plots folder")
     parser.add_argument('-o','--output',  required = True, help="Folder to dump plots to")
-
+    parser.add_argument('--filter',         type =str, nargs='+',  help="Filter for the YAML files to process")
+    parser.add_argument('--samples',        type =str, nargs='+',  help="Filter samples to plot")
+    parser.add_argument('--exclude',        type =str, nargs='+',  help="Exclude lements to plot from a a given yaml")
+    parser.add_argument('--noData',         action='store_true',   help="Do not plot data")
     return parser.parse_args()
 
 def swapPositions(lis, pos1, pos2):
@@ -71,15 +75,19 @@ def main():
     args = get_args()
     trexFolder = args.folder
     outFolder  = args.output
+    yamlFilter = args.filter
+    samplesFilter = args.samples
+    excludeFilter = args.exclude
     os.makedirs(outFolder, exist_ok=True)
     uheppFiles = glob(f"{trexFolder}/*uhepp.yaml")
+    if yamlFilter is not None:
+        uheppFiles = [f for f in uheppFiles if any(rgx_match(yF, f) for yF in yamlFilter)]
+
     for uheppFile in  uheppFiles:
-
-
         name = uheppFile.replace(trexFolder,"").replace(".uhepp.yaml","")
+
         region = "CR" if "CR_ttb" in name else "SR"
         fit    = "post-fit" if "_postfit" in name else "pre-fit"
-        print(name)
         loaded_hist_orig = uhepp.from_yaml(uheppFile)
         loaded_hist = loaded_hist_orig.clone()
         xlabel = loaded_hist.symbol
@@ -111,6 +119,10 @@ def main():
 
                 for stackItem in stackItems:
                     ProcLabel = stackItem.label
+                    if samplesFilter is not None:
+                        if not any(rgx_match(sF, ProcLabel) for sF in samplesFilter):   continue
+                        print(ProcLabel, samplesFilter)
+
                     if ProcLabel not in ["Signal", "Total", "Data"]:
                         for bin_index, bin_content in enumerate(loaded_hist_orig.yields[ProcLabel]):
                             tot_bkgs_content[bin_index] += bin_content
@@ -124,27 +136,39 @@ def main():
                     else:
                         new_stack_items.append(stackItem)
 
-                # Now add a stack for normalised signal
-                tot_bkg         = sum(tot_bkgs_content)
-                signal_yields   = (np.array(signal_content)/sum(signal_content))*tot_bkg
-                signal_norm_factor = tot_bkg/sum(signal_content)
-                signal_yield    = uhepp.Yield(signal_yields, signal_stats)
-                loaded_hist.yields["NormSignal"] = signal_yield
-                norm_signal_si = uhepp.StackItem(["NormSignal"], r"Signal$\,^{\dagger}$", edgecolor=ColorMap['Signal'], linestyle='--')
-                norm_signal_stack = uhepp.Stack([norm_signal_si], bartype="step")
+                if sum(signal_content) != 0:
+                    # Now add a stack for normalised signal
+                    tot_bkg         = sum(tot_bkgs_content)
+                    signal_yields   = (np.array(signal_content)/sum(signal_content))*tot_bkg
+                    signal_norm_factor = tot_bkg/sum(signal_content)
+                    signal_yield    = uhepp.Yield(signal_yields, signal_stats)
+                    loaded_hist.yields["NormSignal"] = signal_yield
+                    norm_signal_si = uhepp.StackItem(["NormSignal"], r"Signal$\,^{\dagger}$", edgecolor=ColorMap['Signal'], linestyle='--')
+                    norm_signal_stack = uhepp.Stack([norm_signal_si], bartype="step")
 
 
                 other_bkgs_yield    = uhepp.Yield(other_bkgs_content, other_bkgs_stats)
                 loaded_hist.yields["others"] = other_bkgs_yield
 
-                other_bkgs_si = uhepp.StackItem(["others"], "other Bkgs")
-                new_stack_items.insert(0, other_bkgs_si)
+                if any(bin_content !=0 for bin_content in other_bkgs_content):
+                    other_bkgs_si = uhepp.StackItem(["others"], "other Bkgs")
+                    new_stack_items.insert(0, other_bkgs_si)
 
-                signalItemIdx = next(idx for idx, item in enumerate(new_stack_items) if item.label == "Signal")
-                move_element = new_stack_items.pop(signalItemIdx)
-                new_stack_items.append(move_element)
+                if sum(signal_content) != 0:
+                    signalItemIdx = next(idx for idx, item in enumerate(new_stack_items) if item.label == "Signal")
+                    move_element = new_stack_items.pop(signalItemIdx)
+                    new_stack_items.append(move_element)
+
                 new_stack = uhepp.Stack(new_stack_items)
                 idx_to_remove = idx
+
+        data_stack_idx = next(idx for idx, stack in enumerate(loaded_hist.stacks) if stack.content[0].label == "Data")
+        total_stack_idx = next(idx for idx, stack in enumerate(loaded_hist.stacks) if stack.content[0].label == "Total")
+        if args.noData:
+            loaded_hist.stacks.pop(data_stack_idx)
+            loaded_hist.ratio = None
+        if samplesFilter is not None:
+            loaded_hist.stacks.pop(total_stack_idx)
 
         if idx_to_remove is not None and new_stack is not None:
             loaded_hist.stacks.pop(idx_to_remove)
@@ -173,7 +197,6 @@ def main():
 
         outname = f"{outFolder}/{name}.pdf"
         loaded_hist.lumi = 140
-        #loaded_hist.brand = "ATLAS"
         loaded_hist.subtext = (r'$\sqrt{s}=13\,\text{TeV}\,, \mathcal{L}=140\,\text{fb}^{-1}$'
                               + "\n"
                               + ('Simulation \n' if simulation else '')
@@ -182,14 +205,23 @@ def main():
 
 
         fig, axes = loaded_hist.render()
-        handles, labels = axes[0].get_legend().legend_handles, [text_obj.get_text() for text_obj in fig.axes[0].get_legend().texts]
-        axes[0].legend(handles=handles, labels=labels, ncols=2, loc="upper right", fontsize=8, bbox_to_anchor=(0.985, 0.975),frameon=False)
+        ratio_ax = None
+        if not isinstance(axes, tuple):
+            main_ax = axes
+        else:
+            main_ax = axes[0]
+            ratio_ax = axes[1]
 
-        axes[0].text(0.45, 1.05, rf"$\dagger\,$ Normalised to total background ($\times {signal_norm_factor:.1f}$)", transform=axes[0].transAxes, fontsize=8, verticalalignment='top')
+        handles, labels = main_ax.get_legend().legend_handles, [text_obj.get_text() for text_obj in fig.axes[0].get_legend().texts]
+        main_ax.legend(handles=handles, labels=labels, ncols=2, loc="upper right", fontsize=8, bbox_to_anchor=(0.985, 0.975),frameon=False)
 
-        axes[1].axhline(1, color="black",linestyle='--',linewidth=0.5)
-        if not simulation:
-            axes[1].set_ylabel("Data/MC", fontsize=10)
+        if signal_norm_factor != 1:
+            main_ax.text(0.45, 1.05, rf"$\dagger\,$ Normalised to total background ($\times {signal_norm_factor:.1f}$)", transform=main_ax.transAxes, fontsize=8, verticalalignment='top')
+
+        if ratio_ax is not None:
+            ratio_ax.axhline(1, color="black",linestyle='--',linewidth=0.5)
+            if not simulation:
+                ratio_ax.set_ylabel("Data/MC", fontsize=10)
         fig.savefig(outname, dpi=300)
 
 if __name__ == "__main__":

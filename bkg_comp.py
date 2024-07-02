@@ -6,6 +6,7 @@ import yaml
 from pprint import pprint
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from tools.utils import rgx_match
 
 def get_args():
     '''
@@ -17,10 +18,13 @@ def get_args():
     parser.add_argument('folder', help="TRExFitter Plots folder")
     parser.add_argument('-o','--output',  required = True, help="Folder to dump plots to")
     parser.add_argument('-b', '--bins',   required = False, default=None, help="Which bins to plot composition for explicitly")
-    parser.add_argument('--oneplot',   action = 'store_true', help="all pie charts on one plot? default is split by region+pre/postfit combos")
-    parser.add_argument('--ncols',     default =3, type = int, help="number of pie charts per row. Default is 3")
-    parser.add_argument('--preOnly',    action = 'store_true',  help="Prefit only?")
-    parser.add_argument('--postOnly',    action = 'store_true',  help="Postfit only?")
+    parser.add_argument('--oneplot',        action = 'store_true', help="all pie charts on one plot? default is split by region+pre/postfit combos")
+    parser.add_argument('--ncols',          default =3, type = int, help="number of pie charts per row. Default is 3")
+    parser.add_argument('--preOnly',        action = 'store_true',  help="Prefit only?")
+    parser.add_argument('--postOnly',       action = 'store_true',  help="Postfit only?")
+    parser.add_argument('--noFitInTitle',   action = 'store_true',  help="Don't write pre/post fit on subplot titles")
+    parser.add_argument('--filter',         type =str, nargs='+',  help="Filter for the YAML files to process")
+    parser.add_argument('--samples',        type =str, nargs='+',  help="Filter samples to plot")
     return parser.parse_args()
 
 def make_fig(yields_mapping, metadata, oneplot, max_columns):
@@ -50,14 +54,29 @@ def make_fig(yields_mapping, metadata, oneplot, max_columns):
     fig = make_subplots(rows=rows, cols=columns,specs=specs, vertical_spacing=0.2, horizontal_spacing=0.01, subplot_titles=titles)
     return fig
 
+# ColorMap = {
+#   't#bar{t} + #geq1b': '#d4e09b', #'#1e81b0',#'#6666cc',
+#   't#bar{t} + #geq1c': '#99AD35', #'#76b5c5',#'#ccccff',
+#   't#bar{t} + light':  '#606c38',    #,'#154c79',#"#cc99ff",
+#   'Fakes': "#f19c79", #"slategray",
+#   'single-top': "#ffdab9",#"#eab676", #,"darkorange",
+#   'Signal': "chocolate", #"#873e23", # "darkred"
+#   'others': "slategray", #"darkgreen"
+#   #'tWH': "#660000",
+# }
+
 ColorMap = {
-  't#bar{t} + #geq1b': '#d4e09b', #'#1e81b0',#'#6666cc',
-  't#bar{t} + #geq1c': '#99AD35', #'#76b5c5',#'#ccccff',
-  't#bar{t} + light':  '#606c38',    #,'#154c79',#"#cc99ff",
-  'Fakes': "#f19c79", #"slategray",
-  'single-top': "#ffdab9",#"#eab676", #,"darkorange",
+  't#bar{t} + #geq1b': '#41764b',#488453',#386641', #'#1e81b0',#'#6666cc',
+  't#bar{t} + #geq1c': '#6A994E', #'#76b5c5',#'#ccccff',
+  't#bar{t} + light':  '#d4e09b',#A7C957',    #,'#154c79',#"#cc99ff",
+  'Fakes': "#FF6F59", #"slategray",
+  'single-top': "#BC4749",#"#eab676", #,"darkorange",
   'Signal': "chocolate", #"#873e23", # "darkred"
   'others': "slategray", #"darkgreen"
+  't#bar{t} + 1b':  '#59a5d8',
+  't#bar{t} + 2b':  '#386fa4',
+  't#bar{t} + 1B':  '#133c55',
+
   #'tWH': "#660000",
 }
 
@@ -66,11 +85,13 @@ def main():
     # Input folder and files
     trexFolder = args.folder
     regex = "*prefit.yaml" if args.preOnly else  "*postfit.yaml" if args.postOnly else "*.yaml"
-    print(regex)
     allFiles = glob(f"{trexFolder}/{regex}")
-
+    samplesFilter = args.samples
+    yamlFilter = args.filter
     notUheppFiles = [f for f in allFiles if "uhepp" not in f]
-
+    if yamlFilter is not None:
+        notUheppFiles = [f for f in notUheppFiles if any(rgx_match(yF, f) for yF in yamlFilter)]
+    assert len(notUheppFiles) != 0, "ERROR:: No files found to read from"
     ordered_list = []
     for path in notUheppFiles:
         fname = path.replace(trexFolder,"")
@@ -123,6 +144,8 @@ def main():
         per_bin_yields = defaultdict(lambda: defaultdict(float))
         for sample_data in yields['Samples']:
             name = sample_data['Name']
+            if samplesFilter is  not None:
+                if not any(rgx_match(sF, name) for sF in samplesFilter):    continue
             sample_yield = sample_data['Yield']
             for bin_idx, bin_yield in enumerate(sample_yield):
                 per_bin_yields[bin_idx][name]       =  bin_yield
@@ -160,7 +183,9 @@ def main():
             for key in filtered_per_bin_yields_fracs[bin_idx]:
                 label = key.replace('#','\\')
                 label = fr'${label}$' if "\\" in label else label
+                if label == "others":   label = "other Bkgs"
                 labels.append(label)
+
 
                 color = ColorMap[key]
                 colors.append(color)
@@ -168,7 +193,8 @@ def main():
 
              # If per bin comp used, each subplot has title REGION + PRE/POSTFIT
             each_pie_title             = f"Bin {bin_idx}" if bin_idx != "allBins" else region
-            each_pie_title += f", {fit}"
+            if not args.noFitInTitle:
+                each_pie_title += f", {fit}"
 
             metadata[bin_idx] = {'labels': labels, 'title': each_pie_title, 'colors': colors}
 

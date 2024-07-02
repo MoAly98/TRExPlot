@@ -27,16 +27,16 @@ def swapPositions(lis, pos1, pos2):
     lis[pos2]=temp
     return lis
 
-# ColorMap = {
-#   't#bar{t} + #geq1b': '#386641', #'#1e81b0',#'#6666cc',
-#   't#bar{t} + #geq1c': '#6A994E', #'#76b5c5',#'#ccccff',
-#   't#bar{t} + light':  '#A7C957',    #,'#154c79',#"#cc99ff",
-#   'Fakes': "#FF6F59", #"slategray",
-#   'single-top': "#BC4749",#"#eab676", #,"darkorange",
-#   'Signal': "#F2E8CF", #"#873e23", # "darkred"
-#   'others': "slategray", #"darkgreen"
-#   #'tWH': "#660000",
-# }
+ColorMap = {
+  't#bar{t} + #geq1b': '#41764b',#488453',#386641', #'#1e81b0',#'#6666cc',
+  't#bar{t} + #geq1c': '#6A994E', #'#76b5c5',#'#ccccff',
+  't#bar{t} + light':  '#d4e09b',#A7C957',    #,'#154c79',#"#cc99ff",
+  'Fakes': "#FF6F59", #"slategray",
+  'single-top': "#BC4749",#"#eab676", #,"darkorange",
+  'Signal': "chocolate", #"#873e23", # "darkred"
+  'others': "slategray", #"darkgreen"
+  #'tWH': "#660000",
+}
 
 # ColorMap = {
 #   't#bar{t} + #geq1b': '#9984D4', #'#1e81b0',#'#6666cc',
@@ -60,16 +60,16 @@ def swapPositions(lis, pos1, pos2):
 #   #'tWH': "#660000",
 # }
 
-ColorMap = {
-  't#bar{t} + #geq1b': '#d4e09b', #'#1e81b0',#'#6666cc',
-  't#bar{t} + #geq1c': '#99AD35', #'#76b5c5',#'#ccccff',
-  't#bar{t} + light':  '#606c38',    #,'#154c79',#"#cc99ff",
-  'Fakes': "#f19c79", #"slategray",
-  'single-top': "#ffdab9",#"#eab676", #,"darkorange",
-  'Signal': "chocolate", #"#873e23", # "darkred"
-  'others': "slategray", #"darkgreen"
-  #'tWH': "#660000",
-}
+# ColorMap = {
+#   't#bar{t} + #geq1b': '#005F60', #'#1e81b0',#'#6666cc',
+#   't#bar{t} + #geq1c': '#008285',#008083', #'#76b5c5',#'#ccccff',
+#   't#bar{t} + light':  '#00D9DD',#249EA0',    #,'#154c79',#"#cc99ff",
+#   'Fakes': "#FAAB36", #"slategray",
+#   'single-top': "#F78104",#"#eab676", #,"darkorange",
+#   'Signal': "chocolate", #"#873e23", # "darkred"
+#   'others': "slategray", #"darkgreen"
+#   #'tWH': "#660000",
+# }
 
 def main():
     args = get_args()
@@ -83,6 +83,8 @@ def main():
     if yamlFilter is not None:
         uheppFiles = [f for f in uheppFiles if any(rgx_match(yF, f) for yF in yamlFilter)]
 
+    if len(uheppFiles) == 0:
+        print("No Uhepp files found..")
     for uheppFile in  uheppFiles:
         name = uheppFile.replace(trexFolder,"").replace(".uhepp.yaml","")
 
@@ -93,8 +95,10 @@ def main():
         xlabel = loaded_hist.symbol
         if "#" in xlabel and "$" not in xlabel:
             xlabel = rf'${xlabel}$'
+        xlabel = xlabel.replace("#",'\\')
+        if "\\" not in xlabel and "$" in xlabel:  xlabel = xlabel.replace("$","")
         xlabel = rf'{xlabel}'
-        loaded_hist.symbol = xlabel.replace("#",'\\')
+        loaded_hist.symbol = xlabel
         simulation = True
 
 
@@ -114,6 +118,10 @@ def main():
 
                 other_bkgs_content = [0]*len(loaded_hist_orig.yields[stackItems[0].label])
                 other_bkgs_stats   = [0]*len(loaded_hist_orig.yields[stackItems[0].label])
+
+                new_total_content = [0]*len(loaded_hist_orig.yields[stackItems[0].label])
+                new_total_stats   = [0]*len(loaded_hist_orig.yields[stackItems[0].label])
+
                 other_bkgs_label = "other Bkgs"
                 new_stack_items = []
 
@@ -121,7 +129,6 @@ def main():
                     ProcLabel = stackItem.label
                     if samplesFilter is not None:
                         if not any(rgx_match(sF, ProcLabel) for sF in samplesFilter):   continue
-                        print(ProcLabel, samplesFilter)
 
                     if ProcLabel not in ["Signal", "Total", "Data"]:
                         for bin_index, bin_content in enumerate(loaded_hist_orig.yields[ProcLabel]):
@@ -134,6 +141,7 @@ def main():
                         for bin_index, bin_content in enumerate(loaded_hist_orig.yields[ProcLabel]):
                             other_bkgs_content[bin_index] += bin_content
                     else:
+                        #stackItem.edgecolor = "black"
                         new_stack_items.append(stackItem)
 
                 if sum(signal_content) != 0:

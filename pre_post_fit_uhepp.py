@@ -19,6 +19,7 @@ def get_args():
     parser.add_argument('--samples',        type =str, nargs='+',  help="Filter samples to plot")
     parser.add_argument('--exclude',        type =str, nargs='+',  help="Exclude lements to plot from a a given yaml")
     parser.add_argument('--noData',         action='store_true',   help="Do not plot data")
+    parser.add_argument('--drawTotaledge',         action='store_true',   help="Draw the edge (no errorbar) of total from filtered samples")
     return parser.parse_args()
 
 def swapPositions(lis, pos1, pos2):
@@ -78,13 +79,13 @@ def main():
     yamlFilter = args.filter
     samplesFilter = args.samples
     excludeFilter = args.exclude
+    drawTotaledge = args.drawTotaledge
     os.makedirs(outFolder, exist_ok=True)
     uheppFiles = glob(f"{trexFolder}/*uhepp.yaml")
     if yamlFilter is not None:
         uheppFiles = [f for f in uheppFiles if any(rgx_match(yF, f) for yF in yamlFilter)]
 
-    if len(uheppFiles) == 0:
-        print("No Uhepp files found..")
+    assert len(uheppFiles) != 0, "No Uhepp files found.."
     for uheppFile in  uheppFiles:
         name = uheppFile.replace(trexFolder,"").replace(".uhepp.yaml","")
 
@@ -107,6 +108,7 @@ def main():
         new_stack = None
         norm_signal_stack = None
         signal_norm_factor = 1
+        new_total_si = None
         for idx, stack in enumerate(stacks):
             stackItems = stack.content
             if not ((stackItems[0].label == "Total") or (stackItems[0].label == "Data")):
@@ -120,7 +122,7 @@ def main():
                 other_bkgs_stats   = [0]*len(loaded_hist_orig.yields[stackItems[0].label])
 
                 new_total_content = [0]*len(loaded_hist_orig.yields[stackItems[0].label])
-                new_total_stats   = [0]*len(loaded_hist_orig.yields[stackItems[0].label])
+                new_total_stats   = [1e-6]*len(loaded_hist_orig.yields[stackItems[0].label])
 
                 other_bkgs_label = "other Bkgs"
                 new_stack_items = []
@@ -143,6 +145,11 @@ def main():
                     else:
                         #stackItem.edgecolor = "black"
                         new_stack_items.append(stackItem)
+
+
+                    if samplesFilter is not None and drawTotaledge:
+                        for bin_index, bin_content in enumerate(loaded_hist_orig.yields[ProcLabel]):
+                            new_total_content[bin_index] += bin_content
 
                 if sum(signal_content) != 0:
                     # Now add a stack for normalised signal
@@ -167,6 +174,11 @@ def main():
                     move_element = new_stack_items.pop(signalItemIdx)
                     new_stack_items.append(move_element)
 
+                if samplesFilter is not None and drawTotaledge:
+                    new_total_yield    = uhepp.Yield(new_total_content, new_total_stats)
+                    loaded_hist.yields["trex_total"] = new_total_yield
+                    new_total_si = uhepp.StackItem(["trex_total"], "Total")
+
                 new_stack = uhepp.Stack(new_stack_items)
                 idx_to_remove = idx
 
@@ -176,7 +188,11 @@ def main():
             loaded_hist.stacks.pop(data_stack_idx)
             loaded_hist.ratio = None
         if samplesFilter is not None:
-            loaded_hist.stacks.pop(total_stack_idx)
+            if not drawTotaledge:
+                loaded_hist.stacks.pop(total_stack_idx)
+            else:
+                loaded_hist.stacks[total_stack_idx].error = "no"
+                loaded_hist.stacks[total_stack_idx].content[0].edgecolor = "black"
 
         if idx_to_remove is not None and new_stack is not None:
             loaded_hist.stacks.pop(idx_to_remove)

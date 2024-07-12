@@ -20,6 +20,8 @@ def get_args():
     parser.add_argument('--exclude',        type =str, nargs='+',  help="Exclude lements to plot from a a given yaml")
     parser.add_argument('--noData',         action='store_true',   help="Do not plot data")
     parser.add_argument('--drawTotaledge',         action='store_true',   help="Draw the edge (no errorbar) of total from filtered samples")
+    parser.add_argument('--regionName',         type=str,   help="Name of the region being plotted, if only one region is used for all plots.")
+    parser.add_argument('--regionLabel',        type=str,   help="Label of the region being plotted, if only one region is used for all plots. Use single quotes in terminal, and entire string in math mode if any part needs math mode.")
     return parser.parse_args()
 
 def swapPositions(lis, pos1, pos2):
@@ -39,38 +41,33 @@ ColorMap = {
   #'tWH': "#660000",
 }
 
-# ColorMap = {
-#   't#bar{t} + #geq1b': '#9984D4', #'#1e81b0',#'#6666cc',
-#   't#bar{t} + #geq1c': '#CAA8F5', #'#76b5c5',#'#ccccff',
-#   't#bar{t} + light':  '#592E83',    #,'#154c79',#"#cc99ff",
-#   'Fakes': "#F5811F", #"slategray",
-#   'single-top': "#FEB702",#"#eab676", #,"darkorange",
-#   'Signal': "#F2E8CF", #"#873e23", # "darkred"
-#   'others': "slategray", #"darkgreen"
-#   #'tWH': "#660000",
-# }
+LabelMap = {}
+LabelMap["n_tophad_jets_CBT4"]                        = r"$n_{j,t_{\text{had}}}(\chi^2_{\text{min, ttl}},    \text{PCBT-bin } 4)$"
+LabelMap["n_tophad_jets_CBT4_ttAll"]                  = r"$n_{j,t_{\text{had}}}(\chi^2_{\text{min, ttAll}},   \text{PCBT-bin } 4)$"
+LabelMap["n_tophad_jets_CBT123_ttAll"]                = r"$n_{j, t_{\text{had}}}(\chi^2_{\text{min, ttAll}}, \text{PCBT-bin }\in\{1,2,3\})$"
+LabelMap['leptons_ID_0']                               = r'$id(\ell_0)$'
+LabelMap['fwdjets_pt_0']                               = r'$p^T_{\text{fwd},0}$'
+LabelMap['sphericity']                                = 'Sphericity'
+LabelMap["chi2_min_ttAll"]                            = r"$\chi^2_{\text{min,ttAll}}$"
+LabelMap["n_nontophad_jets_CBT123"]                   = r"$n_{j, \text{not-}t_{\text{had}}}(\chi^2_{\text{min, ttl}}, \text{PCBT-bin}\in\{1,2,3\})$"
+LabelMap['nonbjets_pt_1']                              = r'$p^T_{\text{light},1}$'
+LabelMap['chi2_min']                                  = r'$\chi^2_{\text{top-higgs}}(M_{H}=111.5,M_{t}=168)$'
+LabelMap["chi2_min_ttl"]                              = r"$\chi^2_{\text{min,ttl}}$"
+LabelMap['nonbjets_tagWeightBin_DL1r_Continuous_0']    = r'$\text{DL1r}_{\text{light},0}$ '
+LabelMap['nonbjets_pt_2']                              = r'$p^T_{\text{light},2}$ '
+LabelMap['nonbjets_eta_0']                             = r'$\eta_{\text{light},0}$'
+LabelMap['tophiggs_chi2_min']                         = r'$\chi^2_{\text{top-higgs}}(M_{H}=113,M_{t}=165)$'
+LabelMap['nonbjets_pt_0']                             = r'$p^T_{\text{light},0}$ '
+LabelMap['chi2_min_DeltaEta_tH']                      = r'$\Delta\eta_{\text{top-higgs}}$'
+LabelMap["n_tophad_jets_CBT0"]                        = r"$n_{j,t_{\text{had}}}(\chi^2_{\text{min, ttl}}, \text{PCBT-bin } 0)$ "
+LabelMap['njets']                                     = r'$n_j$'
+LabelMap["chi2_min_tophad_m_ttAll"]                   = r"$m_{t_{\text{had}}}(\chi^2_{\text{min, ttAll}})$"
+LabelMap['chi2_min_tophad_m']                         = r'$m_{t_{\text{had}}}(\chi^2_{\text{min, ttl}})$'
+LabelMap['nonbjets_eta_2']                             = r'$\eta_{\text{light},2}$'
+LabelMap['chi2_min_deltaRq1q2']                       = r'$\Delta R(q^{W}_{1},q^{W}_{2})$'
+LabelMap["tagnonb_topb_m"]                            = r"$M(b_{\text{top}}, j_{\text{tag}})$"
+LabelMap["tagnonb_eta"]                               = r"$\eta_{\text{tag}}$"
 
-# ColorMap = {
-#   't#bar{t} + #geq1b': '#219EBC', #'#1e81b0',#'#6666cc',
-#   't#bar{t} + #geq1c': '#7CC3DF', #'#76b5c5',#'#ccccff',
-#   't#bar{t} + light':  '#14718C',    #,'#154c79',#"#cc99ff",
-#   'Fakes': "#FFB703", #"slategray",
-#   'single-top': "#FC9D02",#"#eab676", #,"darkorange",
-#   'Signal': "#F98702", #"#873e23", # "darkred"
-#   'others': "slategray", #"darkgreen"
-#   #'tWH': "#660000",
-# }
-
-# ColorMap = {
-#   't#bar{t} + #geq1b': '#005F60', #'#1e81b0',#'#6666cc',
-#   't#bar{t} + #geq1c': '#008285',#008083', #'#76b5c5',#'#ccccff',
-#   't#bar{t} + light':  '#00D9DD',#249EA0',    #,'#154c79',#"#cc99ff",
-#   'Fakes': "#FAAB36", #"slategray",
-#   'single-top': "#F78104",#"#eab676", #,"darkorange",
-#   'Signal': "chocolate", #"#873e23", # "darkred"
-#   'others': "slategray", #"darkgreen"
-#   #'tWH': "#660000",
-# }
 
 def main():
     args = get_args()
@@ -80,25 +77,43 @@ def main():
     samplesFilter = args.samples
     excludeFilter = args.exclude
     drawTotaledge = args.drawTotaledge
+    region_label  = args.regionLabel
+    region_name   = args.regionName
     os.makedirs(outFolder, exist_ok=True)
     uheppFiles = glob(f"{trexFolder}/*uhepp.yaml")
     if yamlFilter is not None:
-        uheppFiles = [f for f in uheppFiles if any(rgx_match(yF, f) for yF in yamlFilter)]
+        uheppFiles = [f for f in uheppFiles if any(rgx_match(yF, f.replace(trexFolder+"/","")) for yF in yamlFilter)]
 
+    nFiles = len(uheppFiles)
     assert len(uheppFiles) != 0, "No Uhepp files found.."
-    for uheppFile in  uheppFiles:
-        name = uheppFile.replace(trexFolder,"").replace(".uhepp.yaml","")
-
+    for idx, uheppFile in  enumerate(uheppFiles):
+        print(f"INFO:: processing {idx+1}/{nFiles}")
+        name = uheppFile.replace(trexFolder+"/","").replace(".uhepp.yaml","")
+        if region_name is not  None:
+            name = region_name
         region = "CR" if "CR_ttb" in name else "SR"
+        if args.regionLabel is not None:
+            region = region_label
         fit    = "post-fit" if "_postfit" in name else "pre-fit"
         loaded_hist_orig = uhepp.from_yaml(uheppFile)
         loaded_hist = loaded_hist_orig.clone()
-        xlabel = loaded_hist.symbol
-        if "#" in xlabel and "$" not in xlabel:
-            xlabel = rf'${xlabel}$'
-        xlabel = xlabel.replace("#",'\\')
-        if "\\" not in xlabel and "$" in xlabel:  xlabel = xlabel.replace("$","")
-        xlabel = rf'{xlabel}'
+
+        ## HACK!!
+        actual_region =  name.replace("VR_SR_ALL_","").replace("VR_CR_ttb_ALL_","").replace("_postfit","").replace("_prefit","")
+        if region_name is not  None:
+            actual_region = region_name
+
+        variable = next((label for label in LabelMap.keys() if label == actual_region), None)
+        if variable is not None:
+            xlabel = LabelMap[variable]
+        else:
+            xlabel = loaded_hist.symbol
+            if "#" in xlabel and "$" not in xlabel:
+                xlabel = rf'${xlabel}$'
+            xlabel = xlabel.replace("#",'\\')
+            if "\\" not in xlabel and "$" in xlabel:  xlabel = xlabel.replace("$","")
+            xlabel = rf'{xlabel}'
+
         loaded_hist.symbol = xlabel
         simulation = True
 
@@ -246,6 +261,7 @@ def main():
             ratio_ax.axhline(1, color="black",linestyle='--',linewidth=0.5)
             if not simulation:
                 ratio_ax.set_ylabel("Data/MC", fontsize=10)
+            ratio_ax.set_ylim(0.89,1.11)
         fig.savefig(outname, dpi=300)
 
 if __name__ == "__main__":

@@ -8,7 +8,6 @@ from tools.utils import rgx_match, extract_hash_substring, texify
 import matplotlib.pyplot as plt
 from matplotlib.ticker import AutoMinorLocator
 import atlasify
-from pprint import pprint
 plt.rcParams['axes.linewidth'] = 1.3
 #plt.rcParams['font.size'] = 12
 plt.rcParams['xtick.major.pad']='10'
@@ -35,6 +34,7 @@ def get_args():
     parser.add_argument('--pulls',          action = 'store_true',    help="Run pulls")
     parser.add_argument('--corrmat',        action = 'store_true',    help="Run corrmat")
     parser.add_argument('--pullSignif',     action = 'store_true',    help="Run pull significances")
+    parser.add_argument('-pt', '--pullmin', type=float, default = 3e-2,    help="Threshold of pull/cosntr to highlight in pull plot")
     return parser.parse_args()
 
 def  main():
@@ -52,6 +52,9 @@ def  main():
     run_impacts = args.impacts
     run_corrmat = args.corrmat
     run_pull_signif = args.pullSignif
+
+    # Threshold of pull/constr to highlight in pull plot
+    pull_constr_threshold = args.pullmin
     # ======================================================================
     # TREx Config Reading
     # ======================================================================
@@ -218,7 +221,7 @@ def  main():
             # ======================================================================
             fig_pulls, ax_pulls = plt.subplots(figsize=(7, 1 + num_nps / 4), dpi=100,layout='tight')
             y_positions = np.arange(num_nps)[::-1]
-            pull_colors = ['royalblue' if bf > 3e-2 or abs(constr-1) > 3e-2 else 'black'  for (bf,  constr) in zip(bestfits, bestfits_unc)]
+            pull_colors = ['royalblue' if bf > pull_constr_threshold or abs(constr-1) > pull_constr_threshold else 'black'  for (bf,  constr) in zip(bestfits, bestfits_unc)]
             ax_pulls.errorbar(bestfits, y_positions, xerr=bestfits_unc, mfc='none', mec='none', ecolor=pull_colors, linestyle='None')
             ax_pulls.fill_between([-2, 2], -0.5, len(bestfits) - 0.5, color="#ffd166")#"#ebf5df")
             ax_pulls.fill_between([-1, 1], -0.5, len(bestfits) - 0.5, color="#06d6a0")#"#bad4aa")

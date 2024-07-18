@@ -2,7 +2,8 @@ import argparse
 import os
 from collections import defaultdict
 import numpy as np
-from tools.fit_results_reader  import read_pulls, read_corr, read_ranking
+import itertools
+from tools.fit_results_reader  import read_pulls, read_corr, read_ranking, read_CovErrDecomp
 from tools.config_reader import process_config
 from tools.utils import rgx_match, extract_hash_substring, texify
 import matplotlib.pyplot as plt
@@ -47,11 +48,13 @@ def  main():
     os.makedirs(f"{outdir}/correlations/", exist_ok = True)
     os.makedirs(f"{outdir}/rankings/", exist_ok = True)
     os.makedirs(f"{outdir}/pulls_signif/", exist_ok = True)
+    os.makedirs(f"{outdir}/CovarianceRanking/", exist_ok = True)
     merge_syst_cats = args.mergecat
     run_pulls = args.pulls
     run_impacts = args.impacts
     run_corrmat = args.corrmat
     run_pull_signif = args.pullSignif
+    run_cov_err_decomp = True
 
     # Threshold of pull/constr to highlight in pull plot
     pull_constr_threshold = args.pullmin
@@ -87,14 +90,19 @@ def  main():
     #  Parsing TREx fit results
     # ======================================================================
 
-    # Read fit results
+
+    # =======================
+    # Pulls and Covariance results
+    # =======================
     fit_results_path = f"{trex_outdir}/{job}/Fits/{job}.txt"
     fit_pulls          = read_pulls(fit_results_path)
     fit_corrmat        = read_corr(fit_results_path)
     pois = objs['POI']
+    assert len(pois) == 1, "Cannot handle more than 1 POI with this code.."
     nfs = objs['NormFactor']
     kfacts = [nf for nf in nfs if nf not in pois]
     np_pulls  = {k: v for k, v in fit_pulls.items() if k not in kfacts+pois}
+    nf_pulls  = {k: v for k, v in fit_pulls.items() if k in kfacts}
     filt_syst_attrs = {k: v for k, v in syst_attrs.items() if k in np_pulls.keys()}
 
     # =======================
@@ -103,12 +111,27 @@ def  main():
     if run_impacts:
         ranking_file_path = f"{trex_outdir}/{job}/Ranking_{pois[0]}.yaml"
         ranking = read_ranking(ranking_file_path)
-        print("WARNING:: No ranking file found...")
+
+    # =======================
+    # Covariance-based Error decomposition results
+    # =======================
+    if run_cov_err_decomp:
+        cov_err_decomp_results_path = f"{trex_outdir}/{job}/Fits/{job}_errDecomp_{pois[0]}.txt"
+        total_impacts, nps_impacts = read_CovErrDecomp(cov_err_decomp_results_path)
+        nps_impacts = {k: v for k, v in sorted(nps_impacts.items(), key=lambda item: item[1]['impact_symm'], reverse=True)}
+        nps_impacts = dict(itertools.islice(nps_impacts.items(), 15))
+        cov_err_decomp_pulls = {}
+        for np_name in nps_impacts.keys():
+            cov_err_decomp_pulls[np_name] = np_pulls[np_name] if np_name in np_pulls else nf_pulls[np_name] if np_name in nf_pulls else "None"
+
+    # ======================================================================
+    # PLOTTING
+    # ======================================================================
 
     # ======================================================================
     #  Create ranking plot
     # ======================================================================
-    if run_impacts and ranking != []:
+    if run_impacts:
         labels = [filt_syst_attrs[k]['label'] if k in  filt_syst_attrs else nfs_attrs[k]['label'] if k in  nfs_attrs else 'None' for k in ranking.keys()]
         labels = texify(labels)
         num_pars = len(list(ranking.keys()))
@@ -143,8 +166,8 @@ def  main():
         post_down = ax_impact.barh(y_pos, impact_postfit_do, color="C5")
         # pulls
         bestfit = [v['pull'] for  v in ranking.values()]
-        up_err = [v['unc_hi'] for v in ranking.values()]
-        do_err = [v['unc_lo'] for v in ranking.values()]
+        up_err  = [v['unc_hi'] for v in ranking.values()]
+        do_err  = [v['unc_lo'] for v in ranking.values()]
 
         pulls = ax_pulls.errorbar(bestfit, y_pos, xerr=[np.abs(do_err), up_err], fmt="o", color="k")
 
@@ -189,6 +212,95 @@ def  main():
             fontsize=LABEL_SIZE,
         )
         fig.savefig(f"{outdir}/rankings/Ranking.pdf", bbox_inches='tight')
+
+    # ======================================================================
+    #  Create ranking plot
+    # ======================================================================
+    if run_cov_err_decomp:
+        nps_labels = [filt_syst_attrs[k]['label'] if k in  filt_syst_attrs else nfs_attrs[k]['label'] if k in nfs_attrs else 'None' for k in nps_impacts.keys()]
+
+        nps_labels = texify(nps_labels)
+        num_nps = 15
+        num_totals = 4
+        num_pars = num_nps + num_totals # Only plot top 20 parameters + 4 totals
+        fig, ax_pulls = plt.subplots(figsize=(6, 2.5 + num_pars * 0.45), dpi=100, layout=None)
+        ax_impact = ax_pulls.twiny()
+        ax_pulls.set_zorder(1)
+        ax_pulls.patch.set_visible(False)
+        # lines through pulls of -1, 0, 1 for orientation
+        ax_pulls.vlines(
+                -1, -1, num_pars - 0.5, linestyles="dashed", color="black", linewidth=0.75
+            )
+        ax_pulls.vlines(
+            0, -1, num_pars - 0.5, linestyles="dashed", color="black", linewidth=0.75
+        )
+        ax_pulls.vlines(
+            1, -1, num_pars - 0.5, linestyles="dashed", color="black", linewidth=0.75
+        )
+
+        y_pos = np.arange(num_pars)[::-1]
+        # Totals labels
+        totals_labels = ["Total error", "Systematic error", "Data Stat error", "MC + Data Stat error"]
+        # post-fit up
+        impact_postfit_up= [v['impact_up'] for v in nps_impacts.values()]
+        impact_postfit_up.insert(0, total_impacts["TOTSTAT_ERROR"]['impact_up'])
+        impact_postfit_up.insert(0, total_impacts["STAT_ERROR"]['impact_up'])
+        impact_postfit_up.insert(0, total_impacts["SYST_ERROR"]['impact_up'])
+        impact_postfit_up.insert(0, total_impacts["TOT_ERROR"]['impact_up'])
+        post_up = ax_impact.barh(y_pos, impact_postfit_up, color="C0")
+        # post-fit down
+        impact_postfit_do= [v['impact_do'] for v in nps_impacts.values()]
+        impact_postfit_do.insert(0, total_impacts["TOTSTAT_ERROR"]['impact_do'])
+        impact_postfit_do.insert(0, total_impacts["STAT_ERROR"]['impact_do'])
+        impact_postfit_do.insert(0, total_impacts["SYST_ERROR"]['impact_do'])
+        impact_postfit_do.insert(0, total_impacts["TOT_ERROR"]['impact_do'])
+
+        post_down = ax_impact.barh(y_pos, impact_postfit_do, color="C5")
+        # pulls
+        bestfit =  [v['pull'] for  k, v  in cov_err_decomp_pulls.items()]
+        up_err  =  [v['unc_hi'] for k, v in cov_err_decomp_pulls.items()]
+        do_err  =  [v['unc_lo'] for k, v in cov_err_decomp_pulls.items()]
+
+        pulls = ax_pulls.errorbar(bestfit, y_pos[num_totals:], xerr=[np.abs(do_err), up_err], fmt="o", color="k")
+
+        ax_pulls.set_xlabel(r"$\left(\hat{\theta} - \theta_0\right) / \Delta \theta$", fontsize=LABEL_SIZE, labelpad=7)
+        ax_impact.set_xlabel(r"$\Delta \mu$", fontsize=LABEL_SIZE, labelpad=7)
+        ax_pulls.set_xlim([-2, 2])
+        ax_impact.set_xlim([-5, 5])
+        ax_pulls.set_ylim([-1, num_pars])
+        impact_max = np.amax(
+            np.fabs(
+                np.hstack(
+                    (
+                        impact_postfit_up,
+                        impact_postfit_do,
+                    )
+                )
+            )
+        )
+        ax_impact.set_xlim([-impact_max * 1.1, impact_max * 1.1])
+        for axis in [ax_pulls.xaxis, ax_impact.xaxis]:
+            axis.set_minor_locator(AutoMinorLocator())
+
+        ax_pulls.set_yticks(y_pos)
+        ax_pulls.set_yticklabels(totals_labels+nps_labels, fontsize=LABEL_SIZE)
+
+        ax_pulls.tick_params(direction="in", which="both", labelsize=LABEL_SIZE)
+        ax_impact.tick_params(direction="in", which="both", labelsize=LABEL_SIZE, pad=0.8)
+        fig.legend(
+            ( post_up, post_down, pulls),
+            (
+                r"post-fit up   impact:",
+                r"post-fit down impact:",
+                "pulls",
+            ),
+            frameon=False,
+            bbox_to_anchor=(-0.2, 0.97),
+            loc="upper left",
+            ncol=3,
+            fontsize=LABEL_SIZE,
+        )
+        fig.savefig(f"{outdir}/CovarianceRanking/covImpacts.pdf", bbox_inches='tight')
 
     # ======================================================================
     #  Create pull and pul significance plots

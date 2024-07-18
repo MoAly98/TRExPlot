@@ -21,8 +21,7 @@ def read_txtfile(file):
 
 def read_ranking(file):
     # Hack when not all bootstraps are done
-    if not os.path.exists(file):
-        return []
+    assert os.path.exists(file), "Ranking file is not found"
 
     with open(file, 'r') as f:
         ranking = yaml.safe_load(f)
@@ -56,7 +55,7 @@ def map_pulls(lines):
     pulls = {}
     for l in lines:
         nuisp, cen, left, right = l.split()
-        pulls[nuisp] = {'pull': float(cen), 'constr': (abs(float(left))+abs(float(right)))/2}
+        pulls[nuisp] = {'pull': float(cen), 'constr': (abs(float(left))+abs(float(right)))/2, 'unc_hi': float(left), 'unc_lo': float(right)}
     return pulls
 
 def read_pulls(file):
@@ -67,3 +66,35 @@ def read_corr(file):
     np_ver = numpy.array(corr, dtype='float64')
 
     return np_ver
+
+def read_CovErrDecomp_txtfile(file):
+
+    assert os.path.exists(file), "Error decomposition  by covariance file  is not found"
+    with open(file, 'r') as f:
+        lines = f.readlines()
+        totals = lines[:7]
+        nps = lines[7:]
+
+    return map_CovErrDecomp(totals, nps)
+
+def map_CovErrDecomp(totals, nps):
+    total_impacts, component_impacts = {}, {}
+    for total_line in totals:
+        nuisp, impact_symm, impact_up, impact_do = total_line.split()
+        # Hack for TREx bug swapping total syst and stat impacts
+        if "SYST" in nuisp: nuisp = nuisp.replace("SYST", "STAT")
+        elif "STAT" in nuisp and "MCSTAT" not in nuisp: nuisp = nuisp.replace("STAT", "SYST")
+        total_impacts[nuisp] = {'impact_symm': float(impact_symm), 'impact_up': float(impact_up), 'impact_do': float(impact_do)}
+    for np_line in nps:
+        if np_line in ["\n", ""]:   continue
+        nuisp, impact_symm, impact_up, impact_do = np_line.split()
+        nuisp  = nuisp.replace("alpha_","")
+        component_impacts[nuisp] =  {'impact_symm': float(impact_symm), 'impact_up': float(impact_up), 'impact_do': float(impact_do)}
+    return total_impacts, component_impacts
+
+def read_CovErrDecomp(file):
+    totals, nps = read_CovErrDecomp_txtfile(file)
+    return totals, nps
+
+if __name__ == "__main__":
+   read_CovErrDecomp("/eos/user/m/maly/thbb/thbb-fit/tHbb_v34_v3_FullSyst/AsimovResults/split_4v5FS_by_HF_no_ttb_split/tHbb_v34_v3_FullSyst_Rect_AltBDT_Asimov_CRSR_SPlusB_with4v5FS_decorrHF_withPtHard/tHbb_v34_v3_FullSyst_Rect_AltBDT/Fits/tHbb_v34_v3_FullSyst_Rect_AltBDT_errDecomp_tH_tWH_NORM.txt")

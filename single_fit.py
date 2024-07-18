@@ -35,6 +35,7 @@ def get_args():
     parser.add_argument('--pulls',          action = 'store_true',    help="Run pulls")
     parser.add_argument('--corrmat',        action = 'store_true',    help="Run corrmat")
     parser.add_argument('--pullSignif',     action = 'store_true',    help="Run pull significances")
+    parser.add_argument('--covDecomp',     action = 'store_true',    help="Run impacts with covariance error decomp")
     parser.add_argument('-pt', '--pullmin', type=float, default = 3e-2,    help="Threshold of pull/cosntr to highlight in pull plot")
     return parser.parse_args()
 
@@ -54,7 +55,7 @@ def  main():
     run_impacts = args.impacts
     run_corrmat = args.corrmat
     run_pull_signif = args.pullSignif
-    run_cov_err_decomp = True
+    run_cov_err_decomp = args.covDecomp
 
     # Threshold of pull/constr to highlight in pull plot
     pull_constr_threshold = args.pullmin

@@ -30,7 +30,7 @@ def get_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('trex_cfg',                         help="TRExFitter configuration file")
     parser.add_argument('-o','--output',   required = True, help="Folder to dump plots to")
-    parser.add_argument('-m','--mergecat',  nargs = '+',    help="Categories to merge")
+    parser.add_argument('-m','--mergecat',  nargs = '+', default=["DataDriven:Instrumental_lumi:Instrumental:Instrumental_JESR:Instrumental_FTAG"],    help="Categories to merge")
     parser.add_argument('--impacts',        action = 'store_true',    help="Run impacts")
     parser.add_argument('--pulls',          action = 'store_true',    help="Run pulls")
     parser.add_argument('--corrmat',        action = 'store_true',    help="Run corrmat")
@@ -45,17 +45,22 @@ def  main():
     args = get_args()
     outdir = args.output
     os.makedirs(outdir, exist_ok = True)
-    os.makedirs(f"{outdir}/pulls/", exist_ok = True)
-    os.makedirs(f"{outdir}/correlations/", exist_ok = True)
-    os.makedirs(f"{outdir}/rankings/", exist_ok = True)
-    os.makedirs(f"{outdir}/pulls_signif/", exist_ok = True)
-    os.makedirs(f"{outdir}/CovarianceRanking/", exist_ok = True)
     merge_syst_cats = args.mergecat
     run_pulls = args.pulls
     run_impacts = args.impacts
     run_corrmat = args.corrmat
     run_pull_signif = args.pullSignif
     run_cov_err_decomp = args.covDecomp
+    if run_pulls:
+        os.makedirs(f"{outdir}/pulls/", exist_ok = True)
+    if run_corrmat:
+        os.makedirs(f"{outdir}/correlations/", exist_ok = True)
+    if run_impacts:
+        os.makedirs(f"{outdir}/rankings/", exist_ok = True)
+    if run_pull_signif:
+        os.makedirs(f"{outdir}/pulls_signif/", exist_ok = True)
+    if run_cov_err_decomp:
+        os.makedirs(f"{outdir}/CovarianceRanking/", exist_ok = True)
 
     # Threshold of pull/constr to highlight in pull plot
     pull_constr_threshold = args.pullmin
@@ -104,7 +109,7 @@ def  main():
     kfacts = [nf for nf in nfs if nf not in pois]
     np_pulls  = {k: v for k, v in fit_pulls.items() if k not in kfacts+pois}
     nf_pulls  = {k: v for k, v in fit_pulls.items() if k in kfacts}
-    filt_syst_attrs = {k: v for k, v in syst_attrs.items() if k in np_pulls.keys()}
+    filt_syst_attrs = {k: v for k, v in syst_attrs.items() if k+"_Acc" in np_pulls.keys() or   k+"_Shape" in np_pulls.keys() or  k in np_pulls.keys()}
 
     # =======================
     # Ranking results
@@ -320,11 +325,18 @@ def  main():
                         skip.extend(syst_cat_list)
                         break
 
-
-            cat_np_pulls = {k: v for k, v in np_pulls.items() if filt_syst_attrs[k]['category'] in syst_cat_list}
+            cat_np_pulls = {k: v for k, v in np_pulls.items() if filt_syst_attrs[k.replace("_Acc","").replace("_Shape","")]['category'] in syst_cat_list}
             pulls = [(v["pull"], v["constr"]) for k, v in cat_np_pulls.items()]
             bestfits, bestfits_unc = zip(*pulls)
-            labels = [filt_syst_attrs[k]['label'] for k in cat_np_pulls.keys()]
+            labels = []
+            for k in cat_np_pulls.keys():
+                if k.endswith("_Acc"):
+                    label = filt_syst_attrs[k.replace("_Acc","")]['label']  + r" \textbf{[Acc.]} "
+                elif k.endswith("_Shape"):
+                    label = filt_syst_attrs[k.replace("_Shape","")]['label']  + r" \textbf{[Shape]} "
+                else:
+                    label = filt_syst_attrs[k]['label']
+                labels.append(label)
             labels = texify(labels)
             num_nps = len(list(cat_np_pulls.keys()))
 
@@ -439,7 +451,7 @@ def  main():
                     ax.text(i, j, f"{corr*100:.1f}", ha="center", va="center", color=text_color)
                 else:
                     ax.text(i, j, f"{corr*100:.0f}", ha="center", va="center", color=text_color)
-        fig.colorbar(im, ax=ax)
+        #fig.colorbar(im, ax=ax)
         ax.set_aspect("auto")  # to get colorbar aligned with matrix
         fig.savefig(f"{outdir}/correlations/corrMat.pdf")
 

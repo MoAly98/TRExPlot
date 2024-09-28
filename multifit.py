@@ -9,6 +9,8 @@ from tools.utils import rgx_match, extract_hash_substring, texify
 import matplotlib.pyplot as plt
 from matplotlib.ticker import AutoMinorLocator
 import atlasify
+import matplotlib.lines as mlines
+
 plt.rcParams['axes.linewidth'] = 1.3
 #plt.rcParams['font.size'] = 12
 plt.rcParams['xtick.major.pad']='10'
@@ -58,7 +60,6 @@ def  main():
     data_for_plot = defaultdict(list)
     for fit in fits:
         # Get Regions, Samples and OutputDirectory
-        print(fits[fit]['config'])
         fit_job, fit_objs, fit_attrs   = process_config(fits[fit]['config'], **{'OutputDir': {},
                                                     'BlindingThreshold': {},
                                                     'POI': {},
@@ -115,7 +116,7 @@ def  main():
             num_nps = len(list(cat_np_pulls.keys()))
 
 
-            data_for_plot[syst_cat_name].append({'bestfits': bestfits, 'bestfits_unc': bestfits_unc, 'num_nps': num_nps, 'labels': labels})
+            data_for_plot[syst_cat_name].append({'bestfits': bestfits, 'bestfits_unc': bestfits_unc, 'num_nps': num_nps, 'labels': labels, 'fit_label': fits[fit]['label']})
 
     # ======================================================================
     #  Figure creation
@@ -127,9 +128,10 @@ def  main():
         for fit_info in list_of_fits:
             for label in fit_info['labels']:
                 if label not in all_np_labels:  all_np_labels.append(label)
-        tot_num_nps = len(list(set(all_np_labels)))
+        tot_num_nps = len(all_np_labels)
 
-        fig_pulls, ax_pulls = plt.subplots(figsize=(7, 1 + tot_num_nps / 4), dpi=100,layout='tight')
+        extra_fig_height = 1 if tot_num_nps > 5 else 1.3
+        fig_pulls, ax_pulls = plt.subplots(figsize=(7,  extra_fig_height + tot_num_nps / 4), dpi=100,layout='tight')
         ax_pulls.fill_between([-2, 2], -0.5,tot_num_nps - 0.5, color="#ffd166")#"#ebf5df")
         ax_pulls.fill_between([-1, 1], -0.5, tot_num_nps - 0.5, color="#06d6a0")#"#bad4aa")
         ax_pulls.vlines(0, -0.5, tot_num_nps - 0.5, linestyles="dotted", color="black")
@@ -138,12 +140,18 @@ def  main():
         #  Figure plotting
         # ======================================================================
 
+        fit_colours = {}
         for fit_idx, fit_info in enumerate(list_of_fits):
             bestfits     = fit_info['bestfits']
             bestfits_unc = fit_info['bestfits_unc']
-            pull_colors  = colours[fit_idx]
+            pull_color  = colours[fit_idx]
+            fit_label    = fit_info['fit_label']
+            fit_colours[fit_label] = pull_color
 
             for np_ypos_nominal, np_label in enumerate(all_np_labels):
+
+                np_in_all_fits = all([np_label in fit['labels'] for fit in list_of_fits])
+
                 if fit_idx == 0:
                     ax_pulls.hlines(np_ypos_nominal+0.5, -3, 3, color="grey", linewidth=0.3, linestyle='dashed',alpha=0.5)
 
@@ -163,8 +171,9 @@ def  main():
                     else :
                         np_ypos = np_ypos_nominal - 0.25*(fit_idx)/nfits
 
-                ax_pulls.errorbar(bestfits[np_idx_in_this_fit], np_ypos, xerr=bestfits_unc[np_idx_in_this_fit], mfc='none', mec='none', ecolor=pull_colors, linestyle='None')
-                ax_pulls.scatter(bestfits[np_idx_in_this_fit], np_ypos, marker="o", s=30, color=pull_colors, linestyle='None', alpha=0.8)
+                ax_pulls.errorbar(bestfits[np_idx_in_this_fit], np_ypos, xerr=bestfits_unc[np_idx_in_this_fit], mfc='none', mec='none', ecolor=pull_color, linestyle='None')
+                ax_pulls.scatter(bestfits[np_idx_in_this_fit], np_ypos, marker="o", s=30, color=pull_color, linestyle='None', alpha=0.8)
+
 
         # X-axis
         ax_pulls.set_xlim([-3, 3])
@@ -172,16 +181,24 @@ def  main():
         ax_pulls.xaxis.set_minor_locator(AutoMinorLocator())
 
         # Y-axis
-        ax_pulls.set_ylim([-0.5, tot_num_nps-0.5])
+        extra_white_space = 1 if tot_num_nps > 5 else 1
+        ax_pulls.set_ylim([-0.5, tot_num_nps+extra_white_space])
         ax_pulls.set_yticks(np.arange(tot_num_nps))
         ax_pulls.set_yticklabels(all_np_labels)
+
+        # legend
+        legend_lines = []
+        for fit_label, fit_colour in fit_colours.items():
+            line = mlines.Line2D([], [], color=fit_colour, marker='.', markersize=6, label=fit_label)
+            legend_lines.append(line)
+        ax_pulls.legend(handles=legend_lines, loc="upper right", frameon=False, ncols=min(len(fit_colours), 5))
 
         # Tick params
         ax_pulls.tick_params(axis="both", which="major", pad=8, labelsize=LABEL_SIZE-4)
         ax_pulls.tick_params(direction="in", top=True, right=True, which="both")
 
         # # Save it!
-        fig_pulls.savefig(f"{outdir}/pulls/pulls_{syst_cat_name}.pdf", dpi=300, bbox_inches='tight')
+        fig_pulls.savefig(f"{outdir}/pulls/pulls_{syst_cat_name}.pdf", dpi=300)
 
 if __name__ == "__main__":
     main()

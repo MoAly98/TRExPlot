@@ -32,7 +32,7 @@ def get_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('trex_cfg',                         help="TRExFitter configuration file")
     parser.add_argument('-o','--output',   required = True, help="Folder to dump plots to")
-    parser.add_argument('-m','--mergecat',  nargs = '+',    help="Categories to merge")
+    parser.add_argument('-m','--mergecat',  nargs = '+', default=["DataDriven:Instrumental_lumi:Instrumental:Instrumental_JESR:Instrumental_FTAG"], help="Categories to merge")
     parser.add_argument('-pt', '--pullmin', type=float, default = 3e-2,    help="Threshold of pull/cosntr to highlight in pull plot")
     return parser.parse_args()
 
@@ -122,6 +122,7 @@ def  main():
     #  Figure creation
     # ======================================================================
     colours = ['black', 'red', 'blue']
+    markers = ['o', 'X', 'v']
     for syst_cat_name, list_of_fits in data_for_plot.items():
         nfits = len(list_of_fits)
         assert nfits < 4, "ERROR: at most 3 fits can be compared"
@@ -133,9 +134,9 @@ def  main():
 
         extra_fig_height = 1 if tot_num_nps > 5 else 1.3
         fig_pulls, ax_pulls = plt.subplots(figsize=(7,  extra_fig_height + tot_num_nps / 4), dpi=100,layout='tight')
-        ax_pulls.fill_between([-2, 2], -0.5,tot_num_nps - 0.5, color="#ffd166")#"#ebf5df")
-        ax_pulls.fill_between([-1, 1], -0.5, tot_num_nps - 0.5, color="#06d6a0")#"#bad4aa")
-        ax_pulls.vlines(0, -0.5, tot_num_nps - 0.5, linestyles="dotted", color="black")
+        ax_pulls.fill_between([-2, 2], -0.5,tot_num_nps - 0.5, color="#ffd166",zorder=0)#"#ebf5df")
+        ax_pulls.fill_between([-1, 1], -0.5, tot_num_nps - 0.5, color="#06d6a0",zorder=1)#"#bad4aa")
+        ax_pulls.vlines(0, -0.5, tot_num_nps - 0.5, linestyles="dotted", color="grey", alpha=0.7,zorder=3)
 
         # ======================================================================
         #  Figure plotting
@@ -146,10 +147,12 @@ def  main():
             bestfits     = fit_info['bestfits']
             bestfits_unc = fit_info['bestfits_unc']
             pull_color  = colours[fit_idx]
+            pull_marker = markers[fit_idx]
             fit_label    = fit_info['fit_label']
-            fit_colours[fit_label] = pull_color
+            fit_colours[fit_label] = (pull_color,pull_marker)
 
-            for np_ypos_nominal, np_label in enumerate(all_np_labels):
+            for np_global_idx, np_label in enumerate(all_np_labels):
+                np_ypos_nominal = tot_num_nps - np_global_idx -1
 
                 np_in_all_fits = all([np_label in fit['labels'] for fit in list_of_fits])
 
@@ -174,8 +177,8 @@ def  main():
                     else:
                         np_ypos = np_ypos_nominal - offset
 
-                ax_pulls.errorbar(bestfits[np_idx_in_this_fit], np_ypos, xerr=bestfits_unc[np_idx_in_this_fit], mfc='none', mec='none', ecolor=pull_color, linestyle='None')
-                ax_pulls.scatter(bestfits[np_idx_in_this_fit], np_ypos, marker="o", s=30*2/nfits, color=pull_color, linestyle='None', alpha=0.8)
+                ax_pulls.errorbar(bestfits[np_idx_in_this_fit], np_ypos, xerr=bestfits_unc[np_idx_in_this_fit], mfc='none', mec='none', ecolor=pull_color, linestyle='None',zorder=4)
+                ax_pulls.scatter(bestfits[np_idx_in_this_fit], np_ypos, marker=pull_marker, s=30*2/nfits, color=pull_color, linestyle='None', alpha=0.8, facecolors='none',zorder=5)
 
 
         # X-axis
@@ -187,12 +190,12 @@ def  main():
         extra_white_space = 1 if tot_num_nps > 5 else 1
         ax_pulls.set_ylim([-0.5, tot_num_nps+extra_white_space])
         ax_pulls.set_yticks(np.arange(tot_num_nps))
-        ax_pulls.set_yticklabels(all_np_labels)
+        ax_pulls.set_yticklabels(all_np_labels[::-1])
 
         # legend
         legend_lines = []
-        for fit_label, fit_colour in fit_colours.items():
-            line = mlines.Line2D([], [], color=fit_colour, marker='.', markersize=6, label=fit_label)
+        for fit_label, fit_colour_marker in fit_colours.items():
+            line = mlines.Line2D([], [], color=fit_colour_marker[0], marker=fit_colour_marker[1], markersize=6, label=fit_label, markerfacecolor='none')
             legend_lines.append(line)
         ax_pulls.legend(handles=legend_lines, loc="upper right", frameon=False, ncols=min(len(fit_colours), 5))
 

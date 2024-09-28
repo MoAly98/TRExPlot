@@ -121,9 +121,10 @@ def  main():
     # ======================================================================
     #  Figure creation
     # ======================================================================
-    colours = ['red', 'blue']
+    colours = ['black', 'red', 'blue']
     for syst_cat_name, list_of_fits in data_for_plot.items():
         nfits = len(list_of_fits)
+        assert nfits < 4, "ERROR: at most 3 fits can be compared"
         all_np_labels = []
         for fit_info in list_of_fits:
             for label in fit_info['labels']:
@@ -160,19 +161,21 @@ def  main():
 
                 if nfits % 2 == 0:
                     if fit_idx == 0:
-                        np_ypos = np_ypos_nominal + 0.25*(fit_idx+1)/nfits
+                        np_ypos = np_ypos_nominal + 0.35*(fit_idx+1)/nfits
                     elif fit_idx % 2 == 0:
-                        np_ypos = np_ypos_nominal + 0.25*(fit_idx)/nfits
+                        np_ypos = np_ypos_nominal + 0.35*(fit_idx)/nfits
                     else :
-                        np_ypos = np_ypos_nominal - 0.25*(fit_idx)/nfits
+                        np_ypos = np_ypos_nominal - 0.35*(fit_idx)/nfits
                 else:
+                    # Calculate the offset, which increases with the distance from fit_idx 0
+                    offset = 0.7 * ((fit_idx + 1) // 2) / (nfits)
                     if fit_idx % 2 == 0:
-                        np_ypos = np_ypos_nominal + 0.25*(fit_idx)/nfits
-                    else :
-                        np_ypos = np_ypos_nominal - 0.25*(fit_idx)/nfits
+                        np_ypos = np_ypos_nominal + offset
+                    else:
+                        np_ypos = np_ypos_nominal - offset
 
                 ax_pulls.errorbar(bestfits[np_idx_in_this_fit], np_ypos, xerr=bestfits_unc[np_idx_in_this_fit], mfc='none', mec='none', ecolor=pull_color, linestyle='None')
-                ax_pulls.scatter(bestfits[np_idx_in_this_fit], np_ypos, marker="o", s=30, color=pull_color, linestyle='None', alpha=0.8)
+                ax_pulls.scatter(bestfits[np_idx_in_this_fit], np_ypos, marker="o", s=30*2/nfits, color=pull_color, linestyle='None', alpha=0.8)
 
 
         # X-axis
